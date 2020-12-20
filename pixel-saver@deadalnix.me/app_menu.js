@@ -3,7 +3,7 @@ const Main = imports.ui.main;
 const Mainloop = imports.mainloop;
 const Shell = imports.gi.Shell;
 const St = imports.gi.St;
-const Tweener = imports.ui.tweener;
+const Tweener = imports.tweener.tweener;
 
 const ExtensionUtils = imports.misc.extensionUtils;
 const Me = ExtensionUtils.getCurrentExtension();
@@ -27,20 +27,20 @@ function updateAppMenu() {
 	if (!win) {
 		return false;
 	}
-	
+
 	let title = win.title;
-	
+
 	// Not the topmost maximized window.
 	if (win !== Util.getWindow()) {
 		let app = Shell.WindowTracker.get_default().get_window_app(win);
 		title = app.get_name();
 	}
-	
+
 	title = title.replace(/\n/g, " ");
 	LOG('Override title ' + title);
 	appMenu._label.set_text(title);
 	tooltip.text = title;
-	
+
 	return false;
 }
 
@@ -53,13 +53,13 @@ function changeActiveWindow(win) {
 	if (win === activeWindow) {
 		return;
 	}
-	
+
 	if (activeWindow) {
 		activeWindow.disconnect(awCallbackID);
 	}
-	
+
 	activeWindow = win;
-	
+
 	if (win) {
 		awCallbackID = win.connect('notify::title', updateAppMenu);
 		updateAppMenu();
@@ -79,7 +79,7 @@ function onFocusChange() {
 		// app menu.
 		return false;
 	}
-	
+
 	changeActiveWindow(global.display.focus_window);
 	return false;
 }
@@ -109,30 +109,30 @@ function onAppMenuHover(actor) {
 	if (showTooltip === hover) {
 		return false;
 	}
-	
+
 	// We are not in the right state, let's fix that.
 	showTooltip = hover;
-	
+
 	if (showTooltip) {
 		tooltipDelayCallbackID = Mainloop.timeout_add(SHOW_DELAY, function() {
 			if (!showTooltip) {
 				WARN('showTooltip is false and delay callback ran.');
 			}
-			
+
 			// Something wants us to stop.
 			if (tooltipDelayCallbackID === 0) {
 				return false;
 			}
-			
+
 			let label = appMenu._label;
 			if (label == null || !label.get_clutter_text().get_layout().is_ellipsized()) {
 				// Do not need to hide.
 				tooltipDelayCallbackID = 0;
 				return false;
 			}
-			
+
 			Main.uiGroup.add_actor(tooltip);
-			
+
 			resetMenuCallback();
 			menuCallbackID = appMenu.menu.connect('open-state-changed', function(menu, open) {
 				if (open) {
@@ -141,33 +141,33 @@ function onAppMenuHover(actor) {
 					Main.uiGroup.add_actor(tooltip);
 				}
 			});
-			
+
 			[px, py] = Main.panel.actor.get_transformed_position();
 			[bx, by] = label.get_transformed_position();
 			[w, h] = label.get_transformed_size();
-			
+
 			let y = py + Main.panel.actor.get_height() + 3;
 			let x = bx - Math.round((tooltip.get_width() - w)/2);
 			tooltip.opacity = 0;
 			tooltip.set_position(x, y);
-			
+
 			LOG('show title tooltip');
-			
+
 			Tweener.removeTweens(tooltip);
 			Tweener.addTween(tooltip, {
 				opacity: 255,
 				time: SHOW_DURATION,
 				transition: 'easeOutQuad',
 			});
-			
+
 			return false;
 		});
 	} else if (tooltipDelayCallbackID > 0) {
 		// If the event ran, then we hide.
 		LOG('hide title tooltip');
-		
+
 		resetMenuCallback();
-		
+
 		Tweener.removeTweens(tooltip);
 		Tweener.addTween(tooltip, {
 			opacity: 0,
@@ -177,10 +177,10 @@ function onAppMenuHover(actor) {
 				Main.uiGroup.remove_actor(tooltip);
 			}
 		});
-		
+
 		tooltipDelayCallbackID = 0;
 	}
-	
+
 	return false;
 }
 
@@ -195,15 +195,15 @@ let tooltipCallbackID = 0;
 
 function enable() {
 	appMenu = Main.panel.statusArea.appMenu;
-	
+
 	tooltip = new St.Label({
 		style_class: 'tooltip dash-label',
 		text: '',
 		opacity: 0
 	});
-	
+
 	wmCallbackIDs = wmCallbackIDs.concat(Util.onSizeChange(updateAppMenu));
-	
+
 	focusCallbackID = global.display.connect('notify::focus-window', onFocusChange);
 	tooltipCallbackID = appMenu.actor.connect('notify::hover', onAppMenuHover);
 }
@@ -212,28 +212,28 @@ function disable() {
 	wmCallbackIDs.forEach(function(id) {
 		global.window_manager.disconnect(id);
 	});
-	
+
 	wmCallbackIDs = [];
-	
+
 	global.display.disconnect(focusCallbackID);
 	focusCallbackID = 0;
-	
+
 	appMenu.actor.disconnect(tooltipCallbackID);
 	tooltipCallbackID = 0;
-	
+
 	if (activeWindow) {
 		activeWindow.disconnect(awCallbackID);
 		awCallbackID = 0;
 		activeWindow = null;
 	}
-	
+
 	if (tooltipDelayCallbackID) {
 		Mainloop.source_remove(tooltipDelayCallbackID);
 		tooltipDelayCallbackID = 0;
 	}
-	
+
 	resetMenuCallback();
-	
+
 	tooltip.destroy();
 	tooltip = null;
 }
